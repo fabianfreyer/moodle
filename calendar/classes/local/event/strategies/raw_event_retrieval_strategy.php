@@ -260,10 +260,15 @@ class raw_event_retrieval_strategy implements raw_event_retrieval_strategy_inter
             $subquerycourses = array_unique($subquerycourses);
         }
 
+        // On MySQL-based databases, the optimizer does not automatically
+        // use the indices in certain cases. Build an index hint for these.
+        $forceindexhint = self::index_hint_sql(array('groupid', 'categoryid', 'courseid'));
+
         // Set subquery filter condition for the courses.
         if (!empty($subquerycourses)) {
             list($incourses, $incoursesparams) = $DB->get_in_or_equal($subquerycourses, SQL_PARAMS_NAMED);
-            $subqueryconditions[] = "WHERE (ev.groupid = 0 AND ev.courseid $incourses AND ev.categoryid = 0)";
+            $subqueryconditions[] = "$forceindexhint
+                                     WHERE (ev.groupid = 0 AND ev.courseid $incourses AND ev.categoryid = 0)";
             $subqueryparams = array_merge($subqueryparams, $incoursesparams);
         }
 
@@ -272,7 +277,8 @@ class raw_event_retrieval_strategy implements raw_event_retrieval_strategy_inter
             $subqueryconditions[] = "WHERE (ev.categoryid != 0 AND ev.eventtype = 'category')";
         } else if (!empty($categories)) {
             list($incategories, $incategoriesparams) = $DB->get_in_or_equal($categories, SQL_PARAMS_NAMED);
-            $subqueryconditions[] = "WHERE (ev.groupid = 0 AND ev.courseid = 0 AND ev.categoryid $incategories)";
+            $subqueryconditions[] = "$forceindexhint
+                                     WHERE (ev.groupid = 0 AND ev.courseid = 0 AND ev.categoryid $incategories)";
             $subqueryparams = array_merge($subqueryparams, $incategoriesparams);
         }
 
@@ -298,9 +304,13 @@ class raw_event_retrieval_strategy implements raw_event_retrieval_strategy_inter
                        FROM $subqueryunion ev
                    GROUP BY ev.modulename, ev.instance, ev.eventtype";
 
+        // Build the index hint for mysql based databases.
+        $useindexhint = self::index_hint_sql(array('groupid', 'courseid', 'categoryid', 'visible', 'userid'), 'USE');
+
         // Build the main query.
         $sql = "SELECT e.*
                   FROM {event} e
+                  $useindexhint
             INNER JOIN ($subquery) fe
                     ON e.modulename = fe.modulename
                        AND e.instance = fe.instance
@@ -318,5 +328,70 @@ class raw_event_retrieval_strategy implements raw_event_retrieval_strategy_inter
         $events = $DB->get_records_sql($sql, $params, $offset, $limitnum);
 
         return  $events === false ? [] : $events;
+    }
+
+    /**
+     * Add some indexes to the "events" table to improve query performance.
+     * Note: Only mysql based databases are supported!
+     * This method build the sql part with the use|force index statement.
+     *
+     * @param array $columns The columns used in this index.
+     * @param string $hinttype The type "USE" or "FORCE"
+     * @param string $table The xmldb table name
+     * @param bool $uniqueindex Index is unique true|false
+     * @return string The sql part for usage in query
+     */
+    public static function index_hint_sql($columns, $hinttype = 'FORCE', $table = 'event', $uniqueindex = false) {
+        global $DB;
+
+        // Only mysql based databases are supported!
+        if ($DB->get_dbfamily() != 'mysql') {
+            return '';
+        }
+
+        $indexname = self::get_indexname($columns, $table, $uniqueindex);
+        if (empty($indexname)) {
+            // Index was not found so we return an empty string.
+            return '';
+        }
+
+        $hinttype = strtoupper($hinttype);
+        $sqlpart = "$hinttype INDEX ($indexname)";
+
+        return $sqlpart;
+    }
+
+    /**
+     * Add some indexes to the "events" table to improve query performance.
+     * Note: Only mysql based databases are supported!
+     * This method find an index name by the columns definition.
+     *
+     * @param array $columns The columns used in this index.
+     * @param string $table The xmldb table name
+     * @param bool $uniqueindex Index is unique true|false
+     * @return string The real name of the index
+     */
+    private static function get_indexname($columns, $table = 'event', $uniqueindex = false) {
+        global $DB;/** @var \moodle_database $DB */
+
+        // We don't want to look into this on every call.
+        static $indexes;
+
+        if (empty($indexes)) {
+            $indexes = $DB->get_indexes($table);
+        }
+
+        if (is_array($indexes)) {
+            $search = array(
+                'unique' => $uniqueindex,
+                'columns' => $columns
+            );
+            foreach ($indexes as $key => $index) {
+                if ($index == $search) {
+                    return $key;
+                }
+            }
+        }
+        return '';
     }
 }
