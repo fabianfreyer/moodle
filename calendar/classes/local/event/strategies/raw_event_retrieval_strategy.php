@@ -203,7 +203,7 @@ class raw_event_retrieval_strategy implements raw_event_retrieval_strategy_inter
                     // Set filter condition for the user's events.
                     // Even though $user is a single scalar, we still use get_in_or_equal() because we are inside a loop.
                     list($inusers, $inuserparams) = $DB->get_in_or_equal($user, SQL_PARAMS_NAMED);
-                    $subqueryconditions[] = "(ev.userid $inusers AND ev.courseid = 0 AND ev.groupid = 0 AND ev.categoryid = 0)";
+                    $subqueryconditions[] = "WHERE (ev.userid $inusers AND ev.courseid = 0 AND ev.groupid = 0 AND ev.categoryid = 0)";
                     $subqueryparams = array_merge($subqueryparams, $inuserparams);
 
                     foreach ($usercourses as $courseid) {
@@ -220,31 +220,31 @@ class raw_event_retrieval_strategy implements raw_event_retrieval_strategy_inter
                 // Set filter condition for the user's group events.
                 if ($usergroups === true || $viewgroupsonly) {
                     // Fetch group events, but not group overrides.
-                    $subqueryconditions[] = "(ev.groupid != 0 AND ev.eventtype = 'group')";
+                    $subqueryconditions[] = "WHERE (ev.groupid != 0 AND ev.eventtype = 'group')";
                 } else if (!empty($usergroups)) {
                     // Fetch group events and group overrides.
                     list($inusergroups, $inusergroupparams) = $DB->get_in_or_equal($usergroups, SQL_PARAMS_NAMED);
-                    $subqueryconditions[] = "(ev.groupid $inusergroups)";
+                    $subqueryconditions[] = "WHERE (ev.groupid $inusergroups)";
                     $subqueryparams = array_merge($subqueryparams, $inusergroupparams);
                 }
             }
         } else if ($users === true) {
             // Events from ALL users.
-            $subqueryconditions[] = "(ev.userid != 0 AND ev.courseid = 0 AND ev.groupid = 0 AND ev.categoryid = 0)";
+            $subqueryconditions[] = "WHERE (ev.userid != 0 AND ev.courseid = 0 AND ev.groupid = 0 AND ev.categoryid = 0)";
 
             if (is_array($groups)) {
                 // Events from a number of groups.
                 list($insqlgroups, $inparamsgroups) = $DB->get_in_or_equal($groups, SQL_PARAMS_NAMED);
-                $subqueryconditions[] = "ev.groupid $insqlgroups";
+                $subqueryconditions[] = "WHERE ev.groupid $insqlgroups";
                 $subqueryparams = array_merge($subqueryparams, $inparamsgroups);
             } else if ($groups === true) {
                 // Events from ALL groups.
-                $subqueryconditions[] = "ev.groupid != 0";
+                $subqueryconditions[] = "WHERE ev.groupid != 0";
             }
 
             if ($courses === true) {
                 // ALL course events. It's not needed to worry about users' access as $users = true.
-                $subqueryconditions[] = "(ev.groupid = 0 AND ev.courseid != 0 AND ev.categoryid = 0)";
+                $subqueryconditions[] = "WHERE (ev.groupid = 0 AND ev.courseid != 0 AND ev.categoryid = 0)";
             }
         }
 
@@ -263,24 +263,23 @@ class raw_event_retrieval_strategy implements raw_event_retrieval_strategy_inter
         // Set subquery filter condition for the courses.
         if (!empty($subquerycourses)) {
             list($incourses, $incoursesparams) = $DB->get_in_or_equal($subquerycourses, SQL_PARAMS_NAMED);
-            $subqueryconditions[] = "(ev.groupid = 0 AND ev.courseid $incourses AND ev.categoryid = 0)";
+            $subqueryconditions[] = "WHERE (ev.groupid = 0 AND ev.courseid $incourses AND ev.categoryid = 0)";
             $subqueryparams = array_merge($subqueryparams, $incoursesparams);
         }
 
         // Set subquery filter condition for the categories.
         if ($categories === true) {
-            $subqueryconditions[] = "(ev.categoryid != 0 AND ev.eventtype = 'category')";
+            $subqueryconditions[] = "WHERE (ev.categoryid != 0 AND ev.eventtype = 'category')";
         } else if (!empty($categories)) {
             list($incategories, $incategoriesparams) = $DB->get_in_or_equal($categories, SQL_PARAMS_NAMED);
-            $subqueryconditions[] = "(ev.groupid = 0 AND ev.courseid = 0 AND ev.categoryid $incategories)";
+            $subqueryconditions[] = "WHERE (ev.groupid = 0 AND ev.courseid = 0 AND ev.categoryid $incategories)";
             $subqueryparams = array_merge($subqueryparams, $incategoriesparams);
         }
 
         // Build the WHERE condition for the sub-query.
         if (!empty($subqueryconditions)) {
             $unionstartquery = "SELECT modulename, instance, eventtype, priority
-                                  FROM {event} ev
-                                 WHERE ";
+                                  FROM {event} ev ";
             $subqueryunion = '('.$unionstartquery . implode(" UNION $unionstartquery ", $subqueryconditions).')';
         } else {
             $subqueryunion = '{event}';
