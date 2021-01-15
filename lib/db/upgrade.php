@@ -2387,5 +2387,57 @@ function xmldb_main_upgrade($oldversion) {
         upgrade_main_savepoint(true, 2021052500.42);
     }
 
+    if ($oldversion < 2020061503.01) {
+        // Define table event.
+        $table = new \xmldb_table('event');
+        
+    }
+        // Add indexes.
+        $index = new xmldb_index(
+            'type-groupid-courseid-visible-timesort',
+            XMLDB_INDEX_NOTUNIQUE,
+            array('type', 'groupid', 'courseid', 'visible', 'timesort')
+        );
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+
+        $index = new xmldb_index(
+            'userid-courseid-groupid-categoryid',
+            XMLDB_INDEX_NOTUNIQUE,
+            array('userid','courseid', 'groupid', 'categoryid')
+        );
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+
+        $index = new xmldb_index(
+            'groupid-categoryid-courseid',
+            XMLDB_INDEX_NOTUNIQUE,
+            array('groupid', 'categoryid', 'courseid')
+        );
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+
+        $index = new xmldb_index(
+            'eventtype-categoryid',
+            XMLDB_INDEX_NOTUNIQUE,
+            array('eventtype', 'categoryid')
+        );
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+
+        $index = new xmldb_index(
+            'groupid-courseid',
+            XMLDB_INDEX_NOTUNIQUE,
+            array('groupid', 'courseid')
+        );
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+
+        upgrade_main_savepoint(true, 2020061503.01);
     return true;
 }
